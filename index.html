@@ -2,147 +2,242 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Menu Roulette</title>
+  <title>Menu Roulette with Visual Spinning Wheel</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
-      line-height: 1.6;
     }
     textarea {
       width: 300px;
-      height: 100px;
+      height: 80px;
     }
     button {
       margin-top: 10px;
       padding: 10px 15px;
       cursor: pointer;
     }
-    #results p {
-      font-size: 1.2em;
-    }
-    hr {
+    /* 룰렛 전체를 감싸는 컨테이너 */
+    #wheel-container {
+      position: relative;
+      width: 300px;
+      height: 300px;
       margin: 20px 0;
+    }
+    /* 룰렛을 그릴 canvas */
+    #wheelCanvas {
+      border: 2px solid #333;
+      border-radius: 50%;
+      background: #fff;
+      width: 300px;
+      height: 300px;
+      display: block;
+    }
+    /* 결과 텍스트(룰렛 중앙에 뜨는) */
+    #result-display {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 24px;
+      font-weight: bold;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    /* 결과 텍스트가 보이도록 하는 클래스 */
+    #result-display.show {
+      opacity: 1;
     }
   </style>
 </head>
 <body>
   <h1>Menu Roulette</h1>
-  <div id="menu-editor">
-    <label for="menu-input">메뉴 항목들 (쉼표로 구분):</label><br>
-    <textarea id="menu-input" placeholder="예: 피자, 파스타, 샐러드"></textarea><br>
-    <button id="save-menu">메뉴 저장</button>
+  <p>메뉴 항목들을 쉼표로 구분해 입력 후 저장하세요.</p>
+  <textarea id="menu-input">피자, 치킨, 파스타, 초밥, 햄버거</textarea><br>
+  <button id="save-menu">메뉴 저장</button>
+
+  <!-- 룰렛 영역 -->
+  <div id="wheel-container">
+    <canvas id="wheelCanvas" width="300" height="300"></canvas>
+    <!-- 룰렛 멈춘 후 중앙에 표시될 텍스트 -->
+    <div id="result-display"></div>
   </div>
-  <hr>
-  <div id="roulette">
-    <button id="spin-button">룰렛 돌리기!</button>
-  </div>
-  <hr>
-  <div id="results">
-    <p>지난 달 메뉴: <span id="last-menu">없음</span></p>
-    <p>이번 달 메뉴: <span id="current-menu">없음</span></p>
-  </div>
-  
+
+  <!-- 룰렛 돌리기 버튼 -->
+  <button id="spin-button">룰렛 돌리기!</button>
+
   <script>
-    // 현재 URL의 쿼리 파라미터를 객체로 변환하는 함수
-    function getQueryParams() {
-      const params = {};
-      window.location.search.substring(1).split("&").forEach(pair => {
-        if(pair) {
-          const [key, value] = pair.split("=");
-          params[decodeURIComponent(key)] = decodeURIComponent(value || '');
-        }
-      });
-      return params;
-    }
+    // 전역 변수들
+    let menus = [];
+    let currentAngle = 0;  // 현재 룰렛 각도
+    let isSpinning = false;
+    const spinDuration = 3000; // 룰렛이 도는 시간(밀리초)
     
-    // 페이지를 새로 고침하지 않고 URL 쿼리 파라미터를 업데이트하는 함수
-    function updateQueryParams(newParams) {
-      const params = new URLSearchParams(window.location.search);
-      for (const key in newParams) {
-        if(newParams[key] === null || newParams[key] === undefined) {
-          params.delete(key);
-        } else {
-          params.set(key, newParams[key]);
-        }
-      }
-      const newUrl = window.location.pathname + '?' + params.toString();
-      window.history.replaceState({}, '', newUrl);
-    }
-    
-    // URL에서 메뉴 리스트를 로드 (JSON 형식으로 저장)
-    function loadMenus() {
-      const params = getQueryParams();
-      if (params.menus) {
-        try {
-          const menus = JSON.parse(params.menus);
-          if (Array.isArray(menus)) {
-            return menus;
-          }
-        } catch (e) {
-          // JSON 파싱 실패 시 쉼표로 구분된 문자열로 처리
-          return params.menus.split(',');
-        }
-      }
-      return [];
-    }
-    
-    // 메뉴 리스트를 URL에 저장
-    function saveMenus(menus) {
-      updateQueryParams({ menus: JSON.stringify(menus) });
-    }
-    
-    // 텍스트 영역에 메뉴 리스트 업데이트
-    function updateMenuInput(menus) {
-      document.getElementById('menu-input').value = menus.join(', ');
-    }
-    
-    // URL에서 지난 달/이번 달 메뉴 로드
-    function loadResult() {
-      const params = getQueryParams();
-      return {
-        last: params.last || '',
-        current: params.current || ''
-      };
-    }
-    
-    // 페이지에 결과 업데이트
-    function updateResultsDisplay(last, current) {
-      document.getElementById('last-menu').textContent = last || '없음';
-      document.getElementById('current-menu').textContent = current || '없음';
-    }
-    
-    // 초기 데이터 로드
-    let menus = loadMenus();
-    updateMenuInput(menus);
-    const result = loadResult();
-    updateResultsDisplay(result.last, result.current);
-    
-    // 메뉴 저장 버튼 클릭 이벤트
-    document.getElementById('save-menu').addEventListener('click', function() {
+    // Canvas 설정
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = 140;
+
+    // 중앙에 표시될 결과 DOM
+    const resultDisplay = document.getElementById('result-display');
+
+    // ---------------------------
+    // 1. 메뉴 로드 및 저장 로직
+    // ---------------------------
+    function loadMenusFromTextarea() {
       const input = document.getElementById('menu-input').value;
-      // 쉼표로 구분하여 공백 제거 및 빈 항목 필터링
-      menus = input.split(',').map(item => item.trim()).filter(item => item);
-      saveMenus(menus);
-      alert('메뉴 목록이 저장되었습니다!');
+      menus = input.split(',')
+                   .map(item => item.trim())
+                   .filter(item => item);
+    }
+
+    document.getElementById('save-menu').addEventListener('click', () => {
+      loadMenusFromTextarea();
+      // 저장 후 룰렛 초기화
+      currentAngle = 0;
+      drawWheel(currentAngle);
+      alert('메뉴가 저장되었습니다!');
     });
-    
-    // 룰렛 돌리기 버튼 클릭 이벤트
-    document.getElementById('spin-button').addEventListener('click', function() {
+
+    // ---------------------------
+    // 2. 룰렛 그리는 함수
+    // ---------------------------
+    function drawWheel(angle) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (menus.length === 0) return;
+
+      // 조각 하나당 각도(라디안)
+      const arcAngle = 2 * Math.PI / menus.length;
+
+      for (let i = 0; i < menus.length; i++) {
+        const startAngle = angle + i * arcAngle;
+        const endAngle   = angle + (i + 1) * arcAngle;
+
+        // 파이 조각 그리기
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        // 색상 번갈아가며 칠하기(원하시면 원하는 색상으로 변경)
+        ctx.fillStyle = (i % 2 === 0) ? '#fbc531' : '#f5f6fa';
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.stroke();
+
+        // 파이 조각에 텍스트 표시
+        ctx.save();
+        ctx.fillStyle = '#000';
+        ctx.translate(centerX, centerY);
+        // 조각 중앙 각도에 맞춰 회전
+        ctx.rotate((startAngle + endAngle) / 2);
+        ctx.textAlign = 'right';
+        ctx.font = '14px Arial';
+        ctx.fillText(menus[i], radius - 10, 5);
+        ctx.restore();
+      }
+    }
+
+    // ---------------------------
+    // 3. 룰렛 회전 애니메이션
+    // ---------------------------
+    // 가속/감속을 위한 이징(easeOut) 함수
+    function easeOutCubic(t) {
+      // t: 0~1 사이 진행도
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function animateSpin(startAngle, endAngle, startTime) {
+      const now = performance.now();
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / spinDuration, 1);   // 0~1
+      const easedProgress = easeOutCubic(progress);
+
+      // 현재 각도 = 시작각도 + (최종각도-시작각도)*보간값
+      currentAngle = startAngle + (endAngle - startAngle) * easedProgress;
+      drawWheel(currentAngle);
+
+      if (progress < 1) {
+        requestAnimationFrame(() => animateSpin(startAngle, endAngle, startTime));
+      } else {
+        // 스핀 종료
+        isSpinning = false;
+        showResult(endAngle);
+      }
+    }
+
+    // ---------------------------
+    // 4. 스핀 완료 후 결과 표시
+    // ---------------------------
+    function showResult(finalAngle) {
+      if (menus.length === 0) return;
+
+      // 룰렛이 멈춘 최종 각도(finalAngle)에서 어떤 메뉴인지 계산
+      const arcAngle = 2 * Math.PI / menus.length;
+      
+      // Canvas의 '위쪽'은 보통 1.5 * Math.PI 부근(수학적 좌표계 기준)
+      // 현재 finalAngle을 2π로 모듈로 연산하여 0~2π 범위로 정규화
+      const normalizedAngle = (finalAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+      
+      // index = (위쪽 기준각 - 현재각) / 조각각도
+      // 조금 복잡해보이지만, "1.5 * Math.PI"를 기준으로 해서 어떤 조각에 해당하는지 계산
+      const index = Math.floor(
+        ((2 * Math.PI + 1.5 * Math.PI - normalizedAngle) % (2 * Math.PI)) / arcAngle
+      );
+
+      const selectedItem = menus[index];
+
+      // 중앙에 결과 표시
+      resultDisplay.textContent = selectedItem;
+      resultDisplay.classList.add('show');
+
+      // 3초 후 사라지도록
+      setTimeout(() => {
+        resultDisplay.classList.remove('show');
+      }, 3000);
+    }
+
+    // ---------------------------
+    // 5. 룰렛 돌리기 버튼
+    // ---------------------------
+    function spinWheel() {
       if (menus.length === 0) {
-        alert('먼저 메뉴 항목을 입력하고 저장해주세요.');
+        alert('메뉴를 먼저 저장하세요!');
         return;
       }
-      // 현재 결과를 불러와 기존 current 값을 last로 이동
-      const currentResults = loadResult();
-      const lastMenu = currentResults.current || '';
-      // 메뉴 목록에서 무작위로 선택
+      if (isSpinning) return; // 이미 돌고 있으면 중단
+
+      isSpinning = true;
+      // 기존 표시 중인 결과 숨기기
+      resultDisplay.classList.remove('show');
+
+      // (1) 랜덤 메뉴를 선택(인덱스)
       const randomIndex = Math.floor(Math.random() * menus.length);
-      const newMenu = menus[randomIndex];
-      // URL 파라미터 업데이트
-      updateQueryParams({ last: lastMenu, current: newMenu });
-      updateResultsDisplay(lastMenu, newMenu);
-    });
+
+      // (2) 조각 각도
+      const arcAngle = 2 * Math.PI / menus.length;
+
+      // (3) 여러 바퀴(예: 5바퀴) 돈 후, 특정 인덱스가 정확히 위쪽에 오도록 각도 계산
+      const spins = 5; // 몇 바퀴 돌 것인지
+      // 선택된 메뉴 조각의 중앙이 "위쪽" (1.5 * Math.PI) 에 위치하게 만들기
+      const chosenAngle = 1.5 * Math.PI - (randomIndex + 0.5) * arcAngle;
+
+      // 최종 각도 = 현재 각도 + (스핀 수 * 2π) + 목표각
+      const finalAngle = currentAngle + spins * 2 * Math.PI + chosenAngle;
+
+      // (4) requestAnimationFrame을 이용해 부드럽게 회전
+      const startTime = performance.now();
+      requestAnimationFrame(() => animateSpin(currentAngle, finalAngle, startTime));
+    }
+
+    // 페이지 로드 시 초기화
+    loadMenusFromTextarea();
+    drawWheel(currentAngle);
+
+    // 룰렛 돌리기 버튼
+    document.getElementById('spin-button').addEventListener('click', spinWheel);
   </script>
 </body>
 </html>
