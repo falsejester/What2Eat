@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Menu Roulette with Visual Spinning Wheel</title>
+  <title>Visual Spinning Roulette</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,8 +20,8 @@
     /* 룰렛 전체를 감싸는 컨테이너 */
     #wheel-container {
       position: relative;
-      width: 300px;
-      height: 300px;
+      width: 500px;
+      height: 500px;
       margin: 20px 0;
     }
     /* 룰렛을 그릴 canvas */
@@ -29,8 +29,8 @@
       border: 2px solid #333;
       border-radius: 50%;
       background: #fff;
-      width: 300px;
-      height: 300px;
+      width: 500px;
+      height: 500px;
       display: block;
     }
     /* 결과 텍스트(룰렛 중앙에 뜨는) */
@@ -39,7 +39,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 24px;
+      font-size: 28px;
       font-weight: bold;
       text-align: center;
       pointer-events: none;
@@ -60,7 +60,7 @@
 
   <!-- 룰렛 영역 -->
   <div id="wheel-container">
-    <canvas id="wheelCanvas" width="300" height="300"></canvas>
+    <canvas id="wheelCanvas" width="500" height="500"></canvas>
     <!-- 룰렛 멈춘 후 중앙에 표시될 텍스트 -->
     <div id="result-display"></div>
   </div>
@@ -69,75 +69,103 @@
   <button id="spin-button">룰렛 돌리기!</button>
 
   <script>
-    // 전역 변수들
+    // ---------------------------
+    // 전역 변수 및 초기 설정
+    // ---------------------------
     let menus = [];
-    let currentAngle = 0;  // 현재 룰렛 각도
+    let currentAngle = 0;       // 현재 룰렛 각도(라디안)
     let isSpinning = false;
-    const spinDuration = 3000; // 룰렛이 도는 시간(밀리초)
-    
+    const spinDuration = 4000;  // 룰렛 도는 시간(밀리초)
+    const spins = 10;           // 몇 바퀴 돌 것인지 (회전 횟수)
+
     // Canvas 설정
     const canvas = document.getElementById('wheelCanvas');
     const ctx = canvas.getContext('2d');
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = 140;
+    const centerX = canvas.width / 2;  // 250
+    const centerY = canvas.height / 2; // 250
+    const radius = 220;               // 룰렛 반지름 (500px 캔버스 안에서 여유있게)
 
     // 중앙에 표시될 결과 DOM
     const resultDisplay = document.getElementById('result-display');
 
     // ---------------------------
-    // 1. 메뉴 로드 및 저장 로직
+    // 1. 메뉴 로드/저장 로직
     // ---------------------------
     function loadMenusFromTextarea() {
       const input = document.getElementById('menu-input').value;
-      menus = input.split(',')
-                   .map(item => item.trim())
-                   .filter(item => item);
+      menus = input
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item);
     }
 
     document.getElementById('save-menu').addEventListener('click', () => {
       loadMenusFromTextarea();
-      // 저장 후 룰렛 초기화
       currentAngle = 0;
       drawWheel(currentAngle);
       alert('메뉴가 저장되었습니다!');
     });
 
     // ---------------------------
-    // 2. 룰렛 그리는 함수
+    // 2. 룰렛 그리기
     // ---------------------------
     function drawWheel(angle) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
       if (menus.length === 0) return;
 
-      // 조각 하나당 각도(라디안)
-      const arcAngle = 2 * Math.PI / menus.length;
+      const arcAngle = (2 * Math.PI) / menus.length;
 
       for (let i = 0; i < menus.length; i++) {
         const startAngle = angle + i * arcAngle;
-        const endAngle   = angle + (i + 1) * arcAngle;
+        const endAngle = angle + (i + 1) * arcAngle;
 
-        // 파이 조각 그리기
+        // (A) 파이 조각 그리기
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
-        // 색상 번갈아가며 칠하기(원하시면 원하는 색상으로 변경)
-        ctx.fillStyle = (i % 2 === 0) ? '#fbc531' : '#f5f6fa';
+
+        // (B) 칸마다 서로 다른 파스텔색
+        ctx.fillStyle = getSliceColor(i, menus.length);
         ctx.fill();
         ctx.strokeStyle = '#333';
         ctx.stroke();
 
-        // 파이 조각에 텍스트 표시
+        // (C) 파이 조각에 텍스트 표시
         ctx.save();
         ctx.fillStyle = '#000';
         ctx.translate(centerX, centerY);
-        // 조각 중앙 각도에 맞춰 회전
-        ctx.rotate((startAngle + endAngle) / 2);
+        ctx.rotate((startAngle + endAngle) / 2); // 조각의 중앙 각도
         ctx.textAlign = 'right';
-        ctx.font = '14px Arial';
-        ctx.fillText(menus[i], radius - 10, 5);
+        ctx.font = '16px Arial';
+        ctx.fillText(menus[i], radius - 10, 6);
         ctx.restore();
       }
+
+      // (D) 빨간색 삼각형 인디케이터(룰렛 윗부분)
+      drawIndicator();
+    }
+
+    // (보조) 칸마다 다른 파스텔색을 생성
+    // hue를 i에 따라 분배하고, 채도·명도를 적절히 높여 연하게
+    function getSliceColor(i, totalSlices) {
+      const hue = Math.floor((360 / totalSlices) * i);
+      const saturation = 60; // 0~100
+      const lightness = 75;  // 0~100
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+
+    // (보조) 인디케이터 그리기
+    function drawIndicator() {
+      ctx.beginPath();
+      // 삼각형의 꼭짓점(룰렛 윗부분 약간 위)
+      ctx.moveTo(centerX, centerY - radius - 10);
+      // 좌우로 펼쳐진 밑변
+      ctx.lineTo(centerX - 15, centerY - radius + 20);
+      ctx.lineTo(centerX + 15, centerY - radius + 20);
+      ctx.closePath();
+      ctx.fillStyle = 'red';
+      ctx.fill();
     }
 
     // ---------------------------
@@ -145,14 +173,13 @@
     // ---------------------------
     // 가속/감속을 위한 이징(easeOut) 함수
     function easeOutCubic(t) {
-      // t: 0~1 사이 진행도
       return 1 - Math.pow(1 - t, 3);
     }
 
     function animateSpin(startAngle, endAngle, startTime) {
       const now = performance.now();
       const elapsed = now - startTime;
-      const progress = Math.min(elapsed / spinDuration, 1);   // 0~1
+      const progress = Math.min(elapsed / spinDuration, 1); // 0~1
       const easedProgress = easeOutCubic(progress);
 
       // 현재 각도 = 시작각도 + (최종각도-시작각도)*보간값
@@ -174,26 +201,21 @@
     function showResult(finalAngle) {
       if (menus.length === 0) return;
 
-      // 룰렛이 멈춘 최종 각도(finalAngle)에서 어떤 메뉴인지 계산
-      const arcAngle = 2 * Math.PI / menus.length;
-      
-      // Canvas의 '위쪽'은 보통 1.5 * Math.PI 부근(수학적 좌표계 기준)
-      // 현재 finalAngle을 2π로 모듈로 연산하여 0~2π 범위로 정규화
+      // 룰렛이 멈춘 최종 각도를 0~2π 범위로 정규화
       const normalizedAngle = (finalAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-      
-      // index = (위쪽 기준각 - 현재각) / 조각각도
-      // 조금 복잡해보이지만, "1.5 * Math.PI"를 기준으로 해서 어떤 조각에 해당하는지 계산
+      const arcAngle = (2 * Math.PI) / menus.length;
+
+      // "위쪽"은 canvas 좌표에서 1.5 * Math.PI 지점
+      // indicator가 있는 위치를 기준으로 어떤 파이 조각인지 계산
       const index = Math.floor(
         ((2 * Math.PI + 1.5 * Math.PI - normalizedAngle) % (2 * Math.PI)) / arcAngle
       );
-
       const selectedItem = menus[index];
 
       // 중앙에 결과 표시
       resultDisplay.textContent = selectedItem;
       resultDisplay.classList.add('show');
-
-      // 3초 후 사라지도록
+      // 3초 후 사라지게
       setTimeout(() => {
         resultDisplay.classList.remove('show');
       }, 3000);
@@ -210,24 +232,14 @@
       if (isSpinning) return; // 이미 돌고 있으면 중단
 
       isSpinning = true;
-      // 기존 표시 중인 결과 숨기기
+      // 이전 결과 숨기기
       resultDisplay.classList.remove('show');
 
-      // (1) 랜덤 메뉴를 선택(인덱스)
-      const randomIndex = Math.floor(Math.random() * menus.length);
+      // 룰렛이 멈출 최종 각도 = 현재각도 + (스핀 수 * 2π) + 임의 난수(0~2π)
+      const randomAngle = Math.random() * 2 * Math.PI;
+      const finalAngle = currentAngle + spins * 2 * Math.PI + randomAngle;
 
-      // (2) 조각 각도
-      const arcAngle = 2 * Math.PI / menus.length;
-
-      // (3) 여러 바퀴(예: 5바퀴) 돈 후, 특정 인덱스가 정확히 위쪽에 오도록 각도 계산
-      const spins = 5; // 몇 바퀴 돌 것인지
-      // 선택된 메뉴 조각의 중앙이 "위쪽" (1.5 * Math.PI) 에 위치하게 만들기
-      const chosenAngle = 1.5 * Math.PI - (randomIndex + 0.5) * arcAngle;
-
-      // 최종 각도 = 현재 각도 + (스핀 수 * 2π) + 목표각
-      const finalAngle = currentAngle + spins * 2 * Math.PI + chosenAngle;
-
-      // (4) requestAnimationFrame을 이용해 부드럽게 회전
+      // 부드럽게 회전 시작
       const startTime = performance.now();
       requestAnimationFrame(() => animateSpin(currentAngle, finalAngle, startTime));
     }
@@ -236,7 +248,7 @@
     loadMenusFromTextarea();
     drawWheel(currentAngle);
 
-    // 룰렛 돌리기 버튼
+    // 룰렛 돌리기 버튼 클릭
     document.getElementById('spin-button').addEventListener('click', spinWheel);
   </script>
 </body>
