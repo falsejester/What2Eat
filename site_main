@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Menu Roulette</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+    textarea {
+      width: 300px;
+      height: 100px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 15px;
+      cursor: pointer;
+    }
+    #results p {
+      font-size: 1.2em;
+    }
+    hr {
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Menu Roulette</h1>
+  <div id="menu-editor">
+    <label for="menu-input">메뉴 항목들 (쉼표로 구분):</label><br>
+    <textarea id="menu-input" placeholder="예: 피자, 파스타, 샐러드"></textarea><br>
+    <button id="save-menu">메뉴 저장</button>
+  </div>
+  <hr>
+  <div id="roulette">
+    <button id="spin-button">룰렛 돌리기!</button>
+  </div>
+  <hr>
+  <div id="results">
+    <p>지난 달 메뉴: <span id="last-menu">없음</span></p>
+    <p>이번 달 메뉴: <span id="current-menu">없음</span></p>
+  </div>
+  
+  <script>
+    // 현재 URL의 쿼리 파라미터를 객체로 변환하는 함수
+    function getQueryParams() {
+      const params = {};
+      window.location.search.substring(1).split("&").forEach(pair => {
+        if(pair) {
+          const [key, value] = pair.split("=");
+          params[decodeURIComponent(key)] = decodeURIComponent(value || '');
+        }
+      });
+      return params;
+    }
+    
+    // 페이지를 새로 고침하지 않고 URL 쿼리 파라미터를 업데이트하는 함수
+    function updateQueryParams(newParams) {
+      const params = new URLSearchParams(window.location.search);
+      for (const key in newParams) {
+        if(newParams[key] === null || newParams[key] === undefined) {
+          params.delete(key);
+        } else {
+          params.set(key, newParams[key]);
+        }
+      }
+      const newUrl = window.location.pathname + '?' + params.toString();
+      window.history.replaceState({}, '', newUrl);
+    }
+    
+    // URL에서 메뉴 리스트를 로드 (JSON 형식으로 저장)
+    function loadMenus() {
+      const params = getQueryParams();
+      if (params.menus) {
+        try {
+          const menus = JSON.parse(params.menus);
+          if (Array.isArray(menus)) {
+            return menus;
+          }
+        } catch (e) {
+          // JSON 파싱 실패 시 쉼표로 구분된 문자열로 처리
+          return params.menus.split(',');
+        }
+      }
+      return [];
+    }
+    
+    // 메뉴 리스트를 URL에 저장
+    function saveMenus(menus) {
+      updateQueryParams({ menus: JSON.stringify(menus) });
+    }
+    
+    // 텍스트 영역에 메뉴 리스트 업데이트
+    function updateMenuInput(menus) {
+      document.getElementById('menu-input').value = menus.join(', ');
+    }
+    
+    // URL에서 지난 달/이번 달 메뉴 로드
+    function loadResult() {
+      const params = getQueryParams();
+      return {
+        last: params.last || '',
+        current: params.current || ''
+      };
+    }
+    
+    // 페이지에 결과 업데이트
+    function updateResultsDisplay(last, current) {
+      document.getElementById('last-menu').textContent = last || '없음';
+      document.getElementById('current-menu').textContent = current || '없음';
+    }
+    
+    // 초기 데이터 로드
+    let menus = loadMenus();
+    updateMenuInput(menus);
+    const result = loadResult();
+    updateResultsDisplay(result.last, result.current);
+    
+    // 메뉴 저장 버튼 클릭 이벤트
+    document.getElementById('save-menu').addEventListener('click', function() {
+      const input = document.getElementById('menu-input').value;
+      // 쉼표로 구분하여 공백 제거 및 빈 항목 필터링
+      menus = input.split(',').map(item => item.trim()).filter(item => item);
+      saveMenus(menus);
+      alert('메뉴 목록이 저장되었습니다!');
+    });
+    
+    // 룰렛 돌리기 버튼 클릭 이벤트
+    document.getElementById('spin-button').addEventListener('click', function() {
+      if (menus.length === 0) {
+        alert('먼저 메뉴 항목을 입력하고 저장해주세요.');
+        return;
+      }
+      // 현재 결과를 불러와 기존 current 값을 last로 이동
+      const currentResults = loadResult();
+      const lastMenu = currentResults.current || '';
+      // 메뉴 목록에서 무작위로 선택
+      const randomIndex = Math.floor(Math.random() * menus.length);
+      const newMenu = menus[randomIndex];
+      // URL 파라미터 업데이트
+      updateQueryParams({ last: lastMenu, current: newMenu });
+      updateResultsDisplay(lastMenu, newMenu);
+    });
+  </script>
+</body>
+</html>
